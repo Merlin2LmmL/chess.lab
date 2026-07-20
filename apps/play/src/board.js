@@ -62,23 +62,29 @@ export class ChessBoardUI {
 
   render() {
     const chess = this.opts.getChess();
-    const board = chess.board(); // [0]=rank8..[7]=rank1, each file a..h
-
-    // board[0] is rank 8, board[7] is rank 1. When unflipped, we want rank 8
-    // rendered first (top of the grid) down to rank 1 last (bottom), so we
-    // iterate rankIdx in natural order. When flipped, we want rank 1 first
-    // (top) down to rank 8 last (bottom), so we reverse it.
-    const ranks = this.flipped ? [...Array(8).keys()].reverse() : [...Array(8).keys()];
-    const files = this.flipped ? [...FILES].reverse() : FILES;
 
     this.el.innerHTML = "";
     this.squareEls.clear();
 
-    for (const rankIdx of ranks) {
-      const rankNumber = 8 - rankIdx; // board row 0 => rank 8
-      for (const file of files) {
+    // We build the grid purely from visual position (row/col on screen) and
+    // derive the actual chess square (e.g. "e4") from that, rather than
+    // reversing separate rank/file arrays and indexing into chess.board().
+    // That indirection is what let rank-reversal and file-reversal drift out
+    // of sync (causing pieces to land on the wrong file). Using chess.get()
+    // with an explicit square name is unambiguous: whatever square we ask
+    // for is exactly the piece that's there, regardless of orientation.
+    for (let visualRow = 0; visualRow < 8; visualRow++) {
+      // visualRow 0 is the top of the screen.
+      const rankNumber = this.flipped ? visualRow + 1 : 8 - visualRow;
+      for (let visualCol = 0; visualCol < 8; visualCol++) {
+        // visualCol 0 is the left of the screen.
+        const file = this.flipped ? FILES[7 - visualCol] : FILES[visualCol];
         const square = `${file}${rankNumber}`;
-        const piece = board[rankIdx][FILES.indexOf(file)];
+        const piece = chess.get(square);
+
+        // Square color is an intrinsic property of the square itself (a1 is
+        // always dark, h1 is always light) - it must NOT depend on flipped
+        // or on iteration order, only on the square's own file/rank.
         const isLight = (FILES.indexOf(file) + rankNumber) % 2 === 1;
 
         const sq = document.createElement("div");
@@ -109,7 +115,7 @@ export class ChessBoardUI {
           sq.appendChild(img);
         }
 
-        if (file === files[files.length - 1]) {
+        if (visualCol === 7) {
           const coord = document.createElement("span");
           coord.className = "coord";
           coord.textContent = String(rankNumber);
