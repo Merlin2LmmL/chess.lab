@@ -222,19 +222,29 @@ async function startAnalysis() {
   els.btnAnalyzeToggle.textContent = "Stop analysis";
   els.btnAnalyzeToggle.classList.add("active");
   els.statusText.textContent = `${game.turn() === "w" ? "White" : "Black"} to move.`;
+  clearAnalysisReadout();
+  multipvInfos = new Map();
   runAnalysisSearch();
 }
 
 /** @type {Map<number, any>} latest info per multipv slot */
 let multipvInfos = new Map();
 
+let analysisRestartTimer = null;
+let analysisSearchToken = 0;
+
 function runAnalysisSearch() {
   const session = sessions.get("analysis");
-  if (!session) return;
+  if (!session || !analysisActive) return;
+
+  const token = ++analysisSearchToken;
   multipvInfos = new Map();
   session.uci.setPosition({ moves: historyUci() });
+
   session.uci
     .go({ infinite: true }, (info) => {
+      // ignore stale callbacks from older searches
+      if (token !== analysisSearchToken) return;
       if (info.score) multipvInfos.set(info.multipv || 1, info);
       renderAnalysis();
     })
@@ -244,9 +254,13 @@ function runAnalysisSearch() {
 function restartAnalysisIfActive() {
   const session = sessions.get("analysis");
   if (!analysisActive || !session) return;
+
   session.uci.stop();
-  // give the engine a tick to emit its final bestmove for the old position before re-querying
-  setTimeout(() => runAnalysisSearch(), 30);
+
+  if (analysisRestartTimer) clearTimeout(analysisRestartTimer);
+  analysisRestartTimer = setTimeout(() => {
+    runAnalysisSearch();
+  }, 120); // was 30; give engine time to settle
 }
 
 function stopAnalysis() {
