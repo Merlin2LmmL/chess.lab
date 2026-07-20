@@ -42,7 +42,7 @@ var ENGINE_NAME = /*__ENGINE_NAME__*/ "engine";
 var ENGINE_AUTHOR = /*__ENGINE_AUTHOR__*/ "unknown";
 
 var DEFAULT_MAX_DEPTH = /*__DEFAULT_DEPTH__*/ 4;
-var DEFAULT_MOVETIME_MS = 4000;
+var DEFAULT_MOVETIME_MS = /*__DEFAULT_MOVETIME__*/ 4000;
 var HARD_SAFETY_MS = 15000; // absolute cap even for "go infinite"
 var MATE_SCORE = 100000;
 
@@ -206,12 +206,19 @@ self.onmessage = function (ev) {
 `;
 
 /**
- * @param {{ name: string, author: string, evaluateSource: string, defaultDepth?: number }} opts
+ * @param {{ name: string, author: string, evaluateSource: string, defaultDepth?: number, defaultMovetime?: number }} opts
  * @returns {string} entry.js source text
  */
-export function buildAlgoEntryJs({ name, author, evaluateSource, defaultDepth = 4 }) {
+export function buildAlgoEntryJs({
+  name,
+  author,
+  evaluateSource,
+  defaultDepth = 4,
+  defaultMovetime = 4000,
+}) {
   return TEMPLATE.replace('/*__ENGINE_NAME__*/ "engine"', JSON.stringify(name || "engine"))
     .replace('/*__ENGINE_AUTHOR__*/ "unknown"', JSON.stringify(author || "unknown"))
     .replace('/*__DEFAULT_DEPTH__*/ 4', String(defaultDepth))
+    .replace('/*__DEFAULT_MOVETIME__*/ 4000', String(defaultMovetime))
     .replace("/*__USER_EVALUATE__*/", evaluateSource);
 }
