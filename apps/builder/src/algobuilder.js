@@ -46,11 +46,21 @@ var DEFAULT_MOVETIME_MS = /*__DEFAULT_MOVETIME__*/ 4000;
 var HARD_SAFETY_MS = 15000; // absolute cap even for "go infinite"
 var MATE_SCORE = 100000;
 
-// Cheap material table used ONLY by the search shell for quiescence move
-// ordering (MVV-LVA-ish). This is intentionally separate from whatever
-// material weights the user's evaluate() below uses.
+// Cheap material table used ONLY by the search shell for move ordering
+// (MVV-LVA-ish, quiescence). Intentionally separate from whatever material
+// weights the user's evaluate() below uses.
 var QSEARCH_PIECE_VALUES = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 0 };
 var QUIESCENCE_MAX_PLY = 6; // caps runaway capture chains (e.g. many pawns on one file)
+
+// Null-move pruning tuning. R = reduction applied to the "free move" search;
+// MIN_DEPTH is the shallowest depth at which we bother trying it.
+var NULL_MOVE_R = 2;
+var NULL_MOVE_MIN_DEPTH = 3;
+
+// Transposition table flags.
+var TT_EXACT = 0;
+var TT_LOWERBOUND = 1;
+var TT_UPPERBOUND = 2;
 
 // ---------------------------------------------------------------------
 // Your evaluation function. Signature: evaluate(chess) -> number (centipawns,
@@ -61,6 +71,18 @@ var QUIESCENCE_MAX_PLY = 6; // caps runaway capture chains (e.g. many pawns on o
 var chess = new Chess();
 var searchState = { stop: false };
 
+// Reset at the start of every "go". A transposition table keyed on FEN
+// (minus the halfmove/fullmove counters, which don't affect legal moves or
+// evaluation) lets the search skip re-deriving positions reached by
+// different move orders -- pure search efficiency, no effect on any
+// submission's evaluate() function. Killer moves and history heuristic are
+// classic move-ordering aids: quiet moves that caused a beta cutoff
+// elsewhere get tried earlier, tightening alpha-beta pruning well beyond
+// "captures first".
+var transpositionTable = new Map();
+var killerMoves = [];
+var historyTable = {};
+
 function send(line) {
   postMessage(line);
 }
@@ -69,16 +91,54 @@ function toUciMove(move) {
   return move.from + move.to + (move.promotion || '');
 }
 
-function orderedMoves(c) {
-  // Captures first. This is a cheap move-ordering heuristic that meaningfully
-  // improves alpha-beta pruning without needing a real MVV-LVA table.
+function getTTKey(c) {
+  var parts = c.fen().split(' ');
+  return parts.slice(0, 4).join(' '); // board, turn, castling, en-passant
+}
+
+function hasNonPawnMaterial(c, color) {
+  var board = c.board();
+  for (var r = 0; r < 8; r++) {
+    for (var f = 0; f < 8; f++) {
+      var piece = board[r][f];
+      if (piece && piece.color === color && piece.type !== 'p' && piece.type !== 'k') return true;
+    }
+  }
+  return false;
+}
+
+function makeNullMove(c) {
+  var parts = c.fen().split(' ');
+  parts[1] = parts[1] === 'w' ? 'b' : 'w';
+  parts[3] = '-'; // an en-passant target can't carry over a null move
+  c.load(parts.join(' '));
+}
+
+function scoreMoveForOrdering(move, ttMoveUci, ply) {
+  var uci = toUciMove(move);
+  if (ttMoveUci && uci === ttMoveUci) return 1000000; // TT/PV move first, always
+  var isCapture = move.flags.indexOf('c') !== -1 || move.flags.indexOf('e') !== -1;
+  if (isCapture) {
+    var captured = move.flags.indexOf('e') !== -1 ? 'p' : move.captured;
+    var victim = QSEARCH_PIECE_VALUES[captured] || 0;
+    var attacker = QSEARCH_PIECE_VALUES[move.piece] || 0;
+    return 100000 + victim * 10 - attacker; // MVV-LVA
+  }
+  var killers = killerMoves[ply];
+  if (killers) {
+    if (killers[0] === uci) return 90000;
+    if (killers[1] === uci) return 89000;
+  }
+  return historyTable[move.from + move.to] || 0;
+}
+
+function orderedMoves(c, ttMoveUci, ply) {
   var moves = c.moves({ verbose: true });
-  moves.sort(function (a, b) {
-    var av = a.flags.indexOf('c') !== -1 ? 1 : 0;
-    var bv = b.flags.indexOf('c') !== -1 ? 1 : 0;
-    return bv - av;
+  var scored = moves.map(function (m) {
+    return { m: m, s: scoreMoveForOrdering(m, ttMoveUci, ply) };
   });
-  return moves;
+  scored.sort(function (a, b) { return b.s - a.s; });
+  return scored.map(function (x) { return x.m; });
 }
 
 function evaluateOrTerminal(c) {
@@ -133,36 +193,95 @@ function quiescence(c, alpha, beta, deadline, nodeCounter, qply) {
   return alpha;
 }
 
-function negamax(c, depth, alpha, beta, deadline, nodeCounter) {
+function negamax(c, depth, alpha, beta, deadline, nodeCounter, ply) {
   nodeCounter.count++;
-  if (depth === 0 || c.game_over()) {
+
+  if (c.in_checkmate()) return -MATE_SCORE;
+  if (c.in_draw() || c.in_stalemate() || c.in_threefold_repetition()) return 0;
+
+  if (depth === 0) {
     return quiescence(c, alpha, beta, deadline, nodeCounter, QUIESCENCE_MAX_PLY);
   }
+
   if (nodeCounter.count % 4096 === 0 && Date.now() > deadline) {
     searchState.stop = true;
-    return evaluateOrTerminal(c);
+    return evaluate(c);
   }
-  var moves = orderedMoves(c);
+
+  var alphaOrig = alpha;
+  var ttKey = getTTKey(c);
+  var ttEntry = transpositionTable.get(ttKey);
+  var ttMoveUci = null;
+  if (ttEntry) {
+    ttMoveUci = ttEntry.bestMoveUci;
+    if (ttEntry.depth >= depth) {
+      if (ttEntry.flag === TT_EXACT) return ttEntry.score;
+      if (ttEntry.flag === TT_LOWERBOUND && ttEntry.score > alpha) alpha = ttEntry.score;
+      else if (ttEntry.flag === TT_UPPERBOUND && ttEntry.score < beta) beta = ttEntry.score;
+      if (alpha >= beta) return ttEntry.score;
+    }
+  }
+
+  // Null-move pruning: if we could "pass" and the opponent still can't beat
+  // beta, this position is already so favorable that a full-width search of
+  // it is very unlikely to be necessary. Skipped in check (illegal to pass)
+  // and with only king+pawns left (zugzwang risk makes the assumption unsafe).
+  if (depth >= NULL_MOVE_MIN_DEPTH && !c.in_check() && hasNonPawnMaterial(c, c.turn())) {
+    var savedFen = c.fen();
+    makeNullMove(c);
+    var nullScore = -negamax(c, depth - 1 - NULL_MOVE_R, -beta, -beta + 1, deadline, nodeCounter, ply + 1);
+    c.load(savedFen);
+    if (searchState.stop) return alpha;
+    if (nullScore >= beta) return beta;
+  }
+
+  var moves = orderedMoves(c, ttMoveUci, ply);
   var best = -Infinity;
+  var bestMoveUci = null;
   for (var i = 0; i < moves.length; i++) {
-    c.move(moves[i]);
-    var score = -negamax(c, depth - 1, -beta, -alpha, deadline, nodeCounter);
+    var move = moves[i];
+    var isQuiet = move.flags.indexOf('c') === -1 && move.flags.indexOf('e') === -1;
+    c.move(move);
+    var score = -negamax(c, depth - 1, -beta, -alpha, deadline, nodeCounter, ply + 1);
     c.undo();
-    if (score > best) best = score;
+    if (score > best) {
+      best = score;
+      bestMoveUci = toUciMove(move);
+    }
     if (best > alpha) alpha = best;
-    if (alpha >= beta) break;
+    if (alpha >= beta) {
+      if (isQuiet) {
+        if (!killerMoves[ply]) killerMoves[ply] = [null, null];
+        if (killerMoves[ply][0] !== bestMoveUci) {
+          killerMoves[ply][1] = killerMoves[ply][0];
+          killerMoves[ply][0] = bestMoveUci;
+        }
+        var histKey = move.from + move.to;
+        historyTable[histKey] = (historyTable[histKey] || 0) + depth * depth;
+      }
+      break;
+    }
     if (searchState.stop) break;
   }
+
+  var flag;
+  if (best <= alphaOrig) flag = TT_UPPERBOUND;
+  else if (best >= beta) flag = TT_LOWERBOUND;
+  else flag = TT_EXACT;
+  transpositionTable.set(ttKey, { depth: depth, score: best, flag: flag, bestMoveUci: bestMoveUci });
+
   return best;
 }
 
 function searchBestMove(maxDepth, deadline, startTime, nodeCounter) {
   var best = null;
   var bestScore = 0;
-  var rootMoves = orderedMoves(chess);
-  if (rootMoves.length === 0) return { move: null, score: 0 };
+  var prevBestMoveUci = null;
+
+  if (chess.moves().length === 0) return { move: null, score: 0 };
 
   for (var d = 1; d <= maxDepth; d++) {
+    var rootMoves = orderedMoves(chess, prevBestMoveUci, 0);
     var iterBest = null;
     var iterBestScore = -Infinity;
     var alpha = -Infinity;
@@ -170,7 +289,7 @@ function searchBestMove(maxDepth, deadline, startTime, nodeCounter) {
     for (var i = 0; i < rootMoves.length; i++) {
       if (Date.now() > deadline || searchState.stop) break;
       chess.move(rootMoves[i]);
-      var score = -negamax(chess, d - 1, -beta, -alpha, deadline, nodeCounter);
+      var score = -negamax(chess, d - 1, -beta, -alpha, deadline, nodeCounter, 1);
       chess.undo();
       if (score > iterBestScore) {
         iterBestScore = score;
@@ -181,6 +300,7 @@ function searchBestMove(maxDepth, deadline, startTime, nodeCounter) {
     if (iterBest) {
       best = iterBest;
       bestScore = iterBestScore;
+      prevBestMoveUci = toUciMove(iterBest);
       var elapsed = Math.max(1, Date.now() - startTime);
       send(
         'info depth ' + d +
@@ -217,6 +337,10 @@ function handlePosition(parts) {
 
 function handleGo(parts) {
   searchState.stop = false;
+  transpositionTable = new Map();
+  killerMoves = [];
+  historyTable = {};
+
   var depth = DEFAULT_MAX_DEPTH;
   var movetime = null;
   var infinite = false;
