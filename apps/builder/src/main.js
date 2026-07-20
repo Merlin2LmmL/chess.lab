@@ -283,8 +283,8 @@ els.btnBuildDownload.addEventListener("click", async () => {
   try {
     const { manifest, files } = await buildCurrentPackage();
     const blob = await buildZip(manifest, files);
-    downloadBlob(blob, `${sanitizeFilename(manifest.name)}.chsengine.zip`);
-    els.buildStatus.textContent = `Downloaded ${sanitizeFilename(manifest.name)}.chsengine.zip`;
+    downloadBlob(blob, `${sanitizeFilename(manifest.name)}.chsengine`);
+    els.buildStatus.textContent = `Downloaded ${sanitizeFilename(manifest.name)}.chsengine`;
   } catch (err) {
     els.buildStatus.textContent = "Error: " + err.message;
   }
