@@ -131,3 +131,7 @@ This repository is now configured to publish both web apps from a single GitHub 
 1. In repository **Settings → Pages**, set **Source** to **GitHub Actions**.
 2. Push to `main` (or run the workflow manually from the Actions tab).
 3. After the workflow completes, open the root site URL to see links to both apps.
+
+## License
+
+This repository is licensed under the GNU General Public License v2.0. See `/LICENSE`.

@@ -8,6 +8,7 @@ const PIECE_TYPE_TO_ASSET = {
 };
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
+const PIECES_BASE_URL = `${import.meta.env.BASE_URL}pieces/`;
 
 /**
  * A dependency-free click-to-move chess board. Legality comes entirely from
@@ -97,7 +98,7 @@ export class ChessBoardUI {
         if (piece) {
           const img = document.createElement("img");
           img.className = "piece";
-          img.src = `/pieces/${piece.color}${PIECE_TYPE_TO_ASSET[piece.type]}.svg`;
+          img.src = `${PIECES_BASE_URL}${piece.color}${PIECE_TYPE_TO_ASSET[piece.type]}.svg`;
           img.alt = `${piece.color === "w" ? "White" : "Black"} ${piece.type}`;
           img.draggable = false;
           sq.appendChild(img);
