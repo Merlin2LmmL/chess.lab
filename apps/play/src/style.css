@@ -205,7 +205,16 @@ h3 { font-size: 12px; text-transform: uppercase; color: var(--text-dim); margin-
   position: absolute; inset: 0; pointer-events: none; opacity: var(--heat-opacity, 0);
   background: var(--heat-color, transparent);
 }
-.sq .piece { position: relative; z-index: 2; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.4)); }
+.piece {
+  width: 82%;
+  height: 82%;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+  position: relative;
+  z-index: 2;
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.4));
+}
 .sq .coord {
   position: absolute; bottom: 1px; right: 3px; font-size: 9px; font-family: var(--mono);
   color: rgba(0,0,0,0.35); z-index: 1;
