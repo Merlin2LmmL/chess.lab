@@ -63,7 +63,12 @@ export class ChessBoardUI {
   render() {
     const chess = this.opts.getChess();
     const board = chess.board(); // [0]=rank8..[7]=rank1, each file a..h
-    const ranks = this.flipped ? [...Array(8).keys()] : [...Array(8).keys()].reverse();
+
+    // board[0] is rank 8, board[7] is rank 1. When unflipped, we want rank 8
+    // rendered first (top of the grid) down to rank 1 last (bottom), so we
+    // iterate rankIdx in natural order. When flipped, we want rank 1 first
+    // (top) down to rank 8 last (bottom), so we reverse it.
+    const ranks = this.flipped ? [...Array(8).keys()].reverse() : [...Array(8).keys()];
     const files = this.flipped ? [...FILES].reverse() : FILES;
 
     this.el.innerHTML = "";
