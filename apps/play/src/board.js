@@ -1,6 +1,10 @@
-const PIECE_GLYPH = {
-  w: { p: "\u2659", n: "\u2658", b: "\u2657", r: "\u2656", q: "\u2655", k: "\u2654" },
-  b: { p: "\u265F", n: "\u265E", b: "\u265D", r: "\u265C", q: "\u265B", k: "\u265A" },
+const PIECE_TYPE_TO_ASSET = {
+  p: "P",
+  n: "N",
+  b: "B",
+  r: "R",
+  q: "Q",
+  k: "K",
 };
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
@@ -91,10 +95,12 @@ export class ChessBoardUI {
         sq.appendChild(heatDiv);
 
         if (piece) {
-          const span = document.createElement("span");
-          span.className = "piece";
-          span.textContent = PIECE_GLYPH[piece.color][piece.type];
-          sq.appendChild(span);
+          const img = document.createElement("img");
+          img.className = "piece";
+          img.src = `/pieces/${piece.color}${PIECE_TYPE_TO_ASSET[piece.type]}.svg`;
+          img.alt = `${piece.color === "w" ? "White" : "Black"} ${piece.type}`;
+          img.draggable = false;
+          sq.appendChild(img);
         }
 
         if (file === files[files.length - 1]) {
