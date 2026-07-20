@@ -114,36 +114,20 @@ npm run build:builder
 
 Each command produces a static `dist/` folder inside the corresponding app directory (`apps/play/dist` and `apps/builder/dist`), ready to be hosted on any static file server.
 
-## Deploying to GitHub Pages
+## Deploying both apps to GitHub Pages
 
-GitHub Pages serves static files, which is exactly what each app builds down to. Since this repository contains two separate apps, you deploy them independently, each to its own Pages site or its own subpath.
+This repository is now configured to publish both web apps from a single GitHub Pages site via the workflow at `.github/workflows/deploy-pages.yml`.
 
-1. In each app's `vite.config.js`, set the `base` option to match the path the app will be served from. For a project site (the common case, served at `https://your-username.github.io/chess-lab/`), add:
+### What is already configured
 
-   ```js
-   export default defineConfig({
-     base: "/chess-lab/",
-     // ...rest of the existing config
-   });
-   ```
+- `apps/play` builds with base path `/chess.lab/play/`
+- `apps/builder` builds with base path `/chess.lab/builder/`
+- The workflow builds both apps, combines them into one Pages artifact, and deploys:
+  - `https://<user>.github.io/chess.lab/play/`
+  - `https://<user>.github.io/chess.lab/builder/`
 
-   Adjust the path if your repository name differs, or if you are deploying the builder app to its own repository or subpath.
+### Remaining GitHub settings steps
 
-2. Build the app you want to publish:
-
-   ```
-   npm run build:play
-   ```
-
-3. Push the contents of `apps/play/dist` to a `gh-pages` branch. The simplest way is with the `gh-pages` package:
-
-   ```
-   npm install -D gh-pages -w apps/play
-   npx gh-pages -d apps/play/dist
-   ```
-
-4. In your GitHub repository settings, under Pages, set the source to the `gh-pages` branch.
-
-5. Repeat steps 1 through 4 for the builder app if you want it published as well, adjusting the `base` path and target branch or repository as needed so the two apps do not overwrite each other.
-
-Once published, GitHub will serve the site at `https://your-username.github.io/chess-lab/` (or the equivalent path you configured), and it will update automatically each time you repeat the build and deploy steps.
+1. In repository **Settings → Pages**, set **Source** to **GitHub Actions**.
+2. Push to `main` (or run the workflow manually from the Actions tab).
+3. After the workflow completes, open the root site URL to see links to both apps.

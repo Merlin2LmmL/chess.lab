@@ -1,0 +1,76 @@
+name: Deploy both apps to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build play app
+        run: npm run build:play
+
+      - name: Build builder app
+        run: npm run build:builder
+
+      - name: Assemble Pages artifact
+        run: |
+          mkdir -p _site/play _site/builder
+          cp -R apps/play/dist/. _site/play/
+          cp -R apps/builder/dist/. _site/builder/
+          cat > _site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="UTF-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+              <title>chess.lab</title>
+            </head>
+            <body>
+              <h1>chess.lab</h1>
+              <ul>
+                <li><a href="./play/">Play app</a></li>
+                <li><a href="./builder/">Builder app</a></li>
+              </ul>
+            </body>
+          </html>
+          HTML
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -57,6 +57,7 @@ els.nnContractHint.textContent = ONNX_RUNTIME_CDN_NOTE;
 
 let activeTab = "algo";
 let activeSubtab = "hash";
+const bundledChessLibPath = `${import.meta.env.BASE_URL}vendor/chess.iife.js`;
 
 els.tabBtns.forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -104,7 +105,7 @@ async function buildCurrentPackage() {
       throw new Error('your code must define a function named "evaluate", e.g. function evaluate(chess) { ... }');
     }
     const entry = buildAlgoEntryJs({ name: meta.name, author: meta.author, evaluateSource, defaultDepth: depth });
-    const chesslib = await fetchStaticAsset("/vendor/chess.iife.js");
+    const chesslib = await fetchStaticAsset(bundledChessLibPath);
     const manifest = buildManifest({
       ...meta,
       kind: "js-algo",
@@ -126,7 +127,7 @@ async function buildCurrentPackage() {
     if (!model) throw new Error("choose an .onnx model file first");
     const depth = parseInt(els.nnDepth.value, 10);
     const entry = buildNnEntryJs({ name: meta.name, author: meta.author, defaultDepth: depth });
-    const chesslib = await fetchStaticAsset("/vendor/chess.iife.js");
+    const chesslib = await fetchStaticAsset(bundledChessLibPath);
     const manifest = buildManifest({
       ...meta,
       kind: "nn-onnx",
