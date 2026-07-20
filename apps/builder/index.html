@@ -22,6 +22,7 @@
 
       <main class="layout">
         <section class="panel form-panel">
+          
           <!-- ALGO TAB -->
           <div class="tab-pane active" id="tab-algo">
             <h2>Algorithmic engine (kind: js-algo)</h2>
@@ -30,15 +31,22 @@
               iterative-deepening alpha-beta search and generates a complete <code>entry.js</code>
               worker around it -- chess.js is bundled in automatically for move generation.
             </p>
-            <label class="field">
-              Depth cap
-              <select id="algo-depth">
-                <option value="2">2 (instant, weak)</option>
-                <option value="3" selected>3 (fast)</option>
-                <option value="4">4 (default-ish, a beat slower)</option>
-                <option value="5">5 (can be slow on tactical positions)</option>
-              </select>
-            </label>
+          
+            <div class="field-row">
+              <label class="field">
+                Depth cap
+                <input type="number" id="algo-depth" min="1" max="10" step="1" value="4" />
+              </label>
+              <label class="field">
+                Move time budget (ms)
+                <input type="number" id="algo-movetime" min="50" max="15000" step="50" value="4000" />
+              </label>
+            </div>
+          
+            <div class="hint fact-panel" id="algo-depth-facts">
+              <!-- filled in by JS below, recomputed on input -->
+            </div>
+          
             <label class="field">
               evaluate(chess)
               <textarea id="algo-evaluate" class="code-editor" spellcheck="false" rows="16"></textarea>
