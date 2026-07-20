@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>chsengine · build &amp; convert</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">&#9822;</span>
+          <span class="brand-text">chsengine <em>build</em></span>
+        </div>
+        <nav class="tabnav" id="tabnav">
+          <button class="tab-btn active" data-tab="algo">Algorithmic</button>
+          <button class="tab-btn" data-tab="nn">Neural network</button>
+          <button class="tab-btn" data-tab="convert">Convert existing</button>
+        </nav>
+      </header>
+
+      <main class="layout">
+        <section class="panel form-panel">
+          <!-- ALGO TAB -->
+          <div class="tab-pane active" id="tab-algo">
+            <h2>Algorithmic engine (kind: js-algo)</h2>
+            <p class="hint">
+              Write an <code>evaluate(chess)</code> function. The builder wraps it in a generic
+              iterative-deepening alpha-beta search and generates a complete <code>entry.js</code>
+              worker around it -- chess.js is bundled in automatically for move generation.
+            </p>
+            <label class="field">
+              Depth cap
+              <select id="algo-depth">
+                <option value="2">2 (instant, weak)</option>
+                <option value="3" selected>3 (fast)</option>
+                <option value="4">4 (default-ish, a beat slower)</option>
+                <option value="5">5 (can be slow on tactical positions)</option>
+              </select>
+            </label>
+            <label class="field">
+              evaluate(chess)
+              <textarea id="algo-evaluate" class="code-editor" spellcheck="false" rows="16"></textarea>
+            </label>
+          </div>
+
+          <!-- NN TAB -->
+          <div class="tab-pane" id="tab-nn">
+            <h2>Neural-network engine (kind: nn-onnx)</h2>
+            <p class="hint" id="nn-contract-hint"></p>
+            <label class="field">
+              .onnx model file (trained, or an untrained/random one for wiring tests)
+              <input type="file" id="nn-model-file" accept=".onnx" />
+            </label>
+            <label class="field">
+              Search depth (each +1 multiplies inference calls by the branching factor)
+              <select id="nn-depth">
+                <option value="1" selected>1 (evaluate each root move once)</option>
+                <option value="2">2</option>
+                <option value="3">3 (slow unless your model is tiny)</option>
+              </select>
+            </label>
+          </div>
+
+          <!-- CONVERT TAB -->
+          <div class="tab-pane" id="tab-convert">
+            <h2>Convert an existing engine</h2>
+            <div class="subtabnav" id="subtabnav">
+              <button class="subtab-btn active" data-subtab="hash">Official WASM build (hash-fragment)</button>
+              <button class="subtab-btn" data-subtab="locate">Raw Emscripten output (locateFile-module)</button>
+              <button class="subtab-btn" data-subtab="jsuci">Hand-written JS engine (js-uci)</button>
+            </div>
+
+            <div class="subtab-pane active" id="subtab-hash">
+              <p class="hint">
+                For engines that already ship an official browser/WASM build that knows how to find
+                its own <code>.wasm</code> from a URL hash (this is exactly how Stockfish's own build
+                works). No code is generated here -- your files are bundled as-is.
+              </p>
+              <label class="field">Vendor .js file <input type="file" id="hash-js-file" accept=".js" /></label>
+              <label class="field">Vendor .wasm file <input type="file" id="hash-wasm-file" accept=".wasm" /></label>
+            </div>
+
+            <div class="subtab-pane" id="subtab-locate">
+              <p class="hint">
+                For engines built with <code>-s MODULARIZE=1 -s EXPORT_NAME=YourFactory</code>. The
+                builder generates a small <code>entry.js</code> wrapper that speaks the plain
+                postMessage UCI contract, targeting the addMessageListener/postMessage bridge used by
+                mainstream Stockfish MODULARIZE builds.
+              </p>
+              <label class="field">Emscripten glue .js file <input type="file" id="locate-js-file" accept=".js" /></label>
+              <label class="field">Emscripten .wasm file <input type="file" id="locate-wasm-file" accept=".wasm" /></label>
+              <label class="field">Factory function name <input type="text" id="locate-factory" placeholder="e.g. Stockfish" /></label>
+            </div>
+
+            <div class="subtab-pane" id="subtab-jsuci">
+              <p class="hint">
+                For hand-written JS engines that already listen for UCI command strings via
+                <code>self.onmessage</code> and reply via <code>postMessage</code>. Packaged as-is.
+              </p>
+              <label class="field">Engine .js file <input type="file" id="jsuci-js-file" accept=".js" /></label>
+            </div>
+          </div>
+
+          <h3>Package metadata</h3>
+          <div class="meta-grid">
+            <label class="field">Name <input type="text" id="meta-name" placeholder="My Engine" /></label>
+            <label class="field">Version <input type="text" id="meta-version" placeholder="1.0.0" value="1.0.0" /></label>
+            <label class="field">Author <input type="text" id="meta-author" placeholder="you" /></label>
+            <label class="field">License <input type="text" id="meta-license" placeholder="MIT" /></label>
+          </div>
+          <label class="field">Description <input type="text" id="meta-description" placeholder="short description" /></label>
+
+          <div class="build-actions">
+            <button id="btn-build-test" class="btn">Build &amp; load into tester</button>
+            <button id="btn-build-download" class="btn primary">Build &amp; download .chsengine.zip</button>
+          </div>
+          <div id="build-status" class="hint"></div>
+        </section>
+
+        <aside class="panel test-panel">
+          <h2>Test console</h2>
+          <p class="hint">Runs the built package in a real Worker, right here, before you download it.</p>
+          <div class="engine-id" id="test-engine-id">No package loaded yet.</div>
+          <div class="quick-actions">
+            <button class="btn small" id="btn-quick-uci">uci</button>
+            <button class="btn small" id="btn-quick-isready">isready</button>
+            <button class="btn small" id="btn-quick-startpos">position startpos</button>
+            <button class="btn small" id="btn-quick-go">go movetime 1000</button>
+            <button class="btn small" id="btn-quick-stop">stop</button>
+          </div>
+          <div class="console-io">
+            <input type="text" id="console-input" placeholder="type a raw UCI command and press Enter" />
+          </div>
+          <pre id="console-log" class="engine-log tall"></pre>
+        </aside>
+      </main>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

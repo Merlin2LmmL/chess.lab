@@ -1,0 +1,147 @@
+const PIECE_GLYPH = {
+  w: { p: "\u2659", n: "\u2658", b: "\u2657", r: "\u2656", q: "\u2655", k: "\u2654" },
+  b: { p: "\u265F", n: "\u265E", b: "\u265D", r: "\u265C", q: "\u265B", k: "\u265A" },
+};
+
+const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
+
+/**
+ * A dependency-free click-to-move chess board. Legality comes entirely from
+ * the chess.js instance handed in; this class only renders it and turns
+ * clicks into chess.js move() calls. Promotions auto-queen.
+ */
+export class ChessBoardUI {
+  /**
+   * @param {HTMLElement} host
+   * @param {{ getChess: () => import("chess.js").Chess, onUserMove: (move: any) => void, canMove: () => boolean }} opts
+   */
+  constructor(host, opts) {
+    this.host = host;
+    this.opts = opts;
+    this.flipped = false;
+    this.selected = null;
+    this.legalTargets = [];
+    this.lastMove = null;
+    /** @type {Map<string,{color:string,opacity:number}>} */
+    this.heat = new Map();
+    this._buildDom();
+  }
+
+  _buildDom() {
+    this.el = document.createElement("div");
+    this.el.className = "board";
+    this.squareEls = new Map();
+    this.host.innerHTML = "";
+    this.host.appendChild(this.el);
+  }
+
+  setFlipped(flipped) {
+    this.flipped = flipped;
+    this.render();
+  }
+
+  setLastMove(from, to) {
+    this.lastMove = from && to ? { from, to } : null;
+  }
+
+  /** @param {Map<string,{color:string,opacity:number}>} heat */
+  setHeatmap(heat) {
+    this.heat = heat || new Map();
+    this.render();
+  }
+
+  clearSelection() {
+    this.selected = null;
+    this.legalTargets = [];
+  }
+
+  render() {
+    const chess = this.opts.getChess();
+    const board = chess.board(); // [0]=rank8..[7]=rank1, each file a..h
+    const ranks = this.flipped ? [...Array(8).keys()] : [...Array(8).keys()].reverse();
+    const files = this.flipped ? [...FILES].reverse() : FILES;
+
+    this.el.innerHTML = "";
+    this.squareEls.clear();
+
+    for (const rankIdx of ranks) {
+      const rankNumber = 8 - rankIdx; // board row 0 => rank 8
+      for (const file of files) {
+        const square = `${file}${rankNumber}`;
+        const piece = board[rankIdx][FILES.indexOf(file)];
+        const isLight = (FILES.indexOf(file) + rankNumber) % 2 === 1;
+
+        const sq = document.createElement("div");
+        sq.className = `sq ${isLight ? "light" : "dark"}`;
+        sq.dataset.square = square;
+
+        if (this.selected === square) sq.classList.add("selected");
+        if (this.legalTargets.includes(square)) sq.classList.add("legal-target");
+        if (this.lastMove && (this.lastMove.from === square || this.lastMove.to === square)) {
+          sq.classList.add("last-move");
+        }
+
+        const heatEntry = this.heat.get(square);
+        const heatDiv = document.createElement("div");
+        heatDiv.className = "heat";
+        if (heatEntry) {
+          heatDiv.style.setProperty("--heat-color", heatEntry.color);
+          heatDiv.style.setProperty("--heat-opacity", String(heatEntry.opacity));
+        }
+        sq.appendChild(heatDiv);
+
+        if (piece) {
+          const span = document.createElement("span");
+          span.className = "piece";
+          span.textContent = PIECE_GLYPH[piece.color][piece.type];
+          sq.appendChild(span);
+        }
+
+        if (file === files[files.length - 1]) {
+          const coord = document.createElement("span");
+          coord.className = "coord";
+          coord.textContent = String(rankNumber);
+          sq.appendChild(coord);
+        }
+
+        sq.addEventListener("click", () => this._onSquareClick(square));
+        this.el.appendChild(sq);
+        this.squareEls.set(square, sq);
+      }
+    }
+  }
+
+  _onSquareClick(square) {
+    if (!this.opts.canMove()) return;
+    const chess = this.opts.getChess();
+
+    if (this.selected === square) {
+      this.clearSelection();
+      this.render();
+      return;
+    }
+
+    if (this.selected && this.legalTargets.includes(square)) {
+      const moveInput = { from: this.selected, to: square, promotion: "q" };
+      const move = chess.move(moveInput);
+      this.clearSelection();
+      if (move) {
+        this.setLastMove(move.from, move.to);
+        this.opts.onUserMove(move);
+      }
+      this.render();
+      return;
+    }
+
+    const piece = chess.get(square);
+    if (piece && piece.color === chess.turn()) {
+      this.selected = square;
+      this.legalTargets = chess.moves({ square, verbose: true }).map((m) => m.to);
+      this.render();
+      return;
+    }
+
+    this.clearSelection();
+    this.render();
+  }
+}
