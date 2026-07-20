@@ -46,6 +46,12 @@ var DEFAULT_MOVETIME_MS = /*__DEFAULT_MOVETIME__*/ 4000;
 var HARD_SAFETY_MS = 15000; // absolute cap even for "go infinite"
 var MATE_SCORE = 100000;
 
+// Cheap material table used ONLY by the search shell for quiescence move
+// ordering (MVV-LVA-ish). This is intentionally separate from whatever
+// material weights the user's evaluate() below uses.
+var QSEARCH_PIECE_VALUES = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 0 };
+var QUIESCENCE_MAX_PLY = 6; // caps runaway capture chains (e.g. many pawns on one file)
+
 // ---------------------------------------------------------------------
 // Your evaluation function. Signature: evaluate(chess) -> number (centipawns,
 // positive = good for the side to move). chess is a live chess.js instance.
@@ -81,10 +87,56 @@ function evaluateOrTerminal(c) {
   return evaluate(c);
 }
 
+// ---------------------------------------------------------------------
+// Quiescence search. Fixed-depth negamax cuts off mid-capture-sequence and
+// evaluates a position where material has just been won but not yet taken
+// back -- the classic "horizon effect" that causes obvious blunders like
+// grabbing a piece that's simply recaptured for a loss. Quiescence extends
+// the search along CAPTURES ONLY until the position is quiet, so the eval
+// at the true leaf reflects a stable material picture.
+// ---------------------------------------------------------------------
+function quiescence(c, alpha, beta, deadline, nodeCounter, qply) {
+  nodeCounter.count++;
+
+  if (c.in_checkmate()) return -MATE_SCORE;
+  if (c.in_draw() || c.in_stalemate() || c.in_threefold_repetition()) return 0;
+
+  if (nodeCounter.count % 4096 === 0 && Date.now() > deadline) {
+    searchState.stop = true;
+    return evaluate(c);
+  }
+
+  // Stand-pat: the side to move isn't forced to capture, so the "do
+  // nothing" evaluation is itself a valid lower bound.
+  var standPat = evaluate(c);
+  if (standPat >= beta) return beta;
+  if (standPat > alpha) alpha = standPat;
+  if (qply <= 0) return alpha;
+
+  var moves = c.moves({ verbose: true }).filter(function (m) {
+    return m.flags.indexOf('c') !== -1 || m.flags.indexOf('e') !== -1;
+  });
+  moves.sort(function (a, b) {
+    var av = QSEARCH_PIECE_VALUES[a.captured] || 0;
+    var bv = QSEARCH_PIECE_VALUES[b.captured] || 0;
+    return bv - av;
+  });
+
+  for (var i = 0; i < moves.length; i++) {
+    c.move(moves[i]);
+    var score = -quiescence(c, -beta, -alpha, deadline, nodeCounter, qply - 1);
+    c.undo();
+    if (searchState.stop) return alpha;
+    if (score >= beta) return beta;
+    if (score > alpha) alpha = score;
+  }
+  return alpha;
+}
+
 function negamax(c, depth, alpha, beta, deadline, nodeCounter) {
   nodeCounter.count++;
   if (depth === 0 || c.game_over()) {
-    return evaluateOrTerminal(c);
+    return quiescence(c, alpha, beta, deadline, nodeCounter, QUIESCENCE_MAX_PLY);
   }
   if (nodeCounter.count % 4096 === 0 && Date.now() > deadline) {
     searchState.stop = true;
