@@ -19,6 +19,8 @@ const els = {
   },
 
   algoDepth: document.getElementById("algo-depth"),
+  algoMovetime: document.getElementById("algo-movetime"),
+  algoDepthFacts: document.getElementById("algo-depth-facts"),
   algoEvaluate: document.getElementById("algo-evaluate"),
 
   nnContractHint: document.getElementById("nn-contract-hint"),
@@ -75,6 +77,57 @@ els.subtabBtns.forEach((btn) => {
   });
 });
 
+// ---------- algo depth/movetime fact panel ----------
+//
+// Replaces vague "fast / slow" labels with computed numbers. Depth is a
+// ceiling on iterative deepening, not a fixed target -- the real throttle
+// is the movetime budget, so we show both together and explain how they
+// interact instead of implying depth alone determines speed.
+
+const AVG_BRANCHING_FACTOR = 33; // typical legal moves/position across a game
+const ASSUMED_NODES_PER_SEC_LOW = 50000; // conservative Worker + chess.js throughput
+const ASSUMED_NODES_PER_SEC_HIGH = 300000; // optimistic, quiet position, well-pruned
+
+function clampInt(value, min, max, fallback) {
+  const n = parseInt(value, 10);
+  if (Number.isNaN(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+function updateAlgoDepthFacts() {
+  const depth = clampInt(els.algoDepth.value, 1, 10, 4);
+  const movetime = clampInt(els.algoMovetime.value, 50, 15000, 4000);
+
+  const worstCaseNodes = Math.pow(AVG_BRANCHING_FACTOR, depth);
+  const bestCaseNodes = Math.pow(Math.sqrt(AVG_BRANCHING_FACTOR), depth);
+
+  const estSecondsLow = worstCaseNodes / ASSUMED_NODES_PER_SEC_HIGH;
+  const estSecondsHigh = worstCaseNodes / ASSUMED_NODES_PER_SEC_LOW;
+  const likelyTimeboxed = estSecondsLow * 1000 > movetime;
+
+  els.algoDepthFacts.innerHTML = `
+    <strong>What this actually means:</strong><br/>
+    Depth ${depth} is a <em>ceiling</em, not a target: iterative deepening searches
+    1, 2, 3... up to ${depth}, and stops early -- returning the last fully-completed
+    depth's move -- if the ${movetime}ms budget runs out first.<br/>
+    Node count at depth ${depth}, assuming ~${AVG_BRANCHING_FACTOR} legal moves/position:
+    <ul>
+      <li>Best case (strong alpha-beta pruning): ~${bestCaseNodes.toLocaleString(undefined, { maximumFractionDigits: 0 })} nodes</li>
+      <li>Worst case (wide-open/tactical, little pruning): ~${worstCaseNodes.toLocaleString()} nodes</li>
+    </ul>
+    At an assumed ${ASSUMED_NODES_PER_SEC_LOW.toLocaleString()}-${ASSUMED_NODES_PER_SEC_HIGH.toLocaleString()} nodes/sec
+    for this Worker + chess.js setup, reaching depth ${depth} in the worst case would take
+    roughly ${estSecondsLow.toFixed(2)}s-${estSecondsHigh.toFixed(2)}s.
+    ${likelyTimeboxed
+      ? `<strong>With a ${movetime}ms budget, complex positions will likely be cut off before finishing depth ${depth}</strong> -- the engine will fall back to whatever depth it did complete.`
+      : `With a ${movetime}ms budget, depth ${depth} should usually complete even in complex positions.`}
+  `;
+}
+
+els.algoDepth.addEventListener("input", updateAlgoDepthFacts);
+els.algoMovetime.addEventListener("input", updateAlgoDepthFacts);
+updateAlgoDepthFacts();
+
 function metaFields() {
   return {
     name: els.metaName.value.trim() || "My Engine",
@@ -99,12 +152,19 @@ async function buildCurrentPackage() {
   const meta = metaFields();
 
   if (activeTab === "algo") {
-    const depth = parseInt(els.algoDepth.value, 10);
+    const depth = clampInt(els.algoDepth.value, 1, 10, 4);
+    const movetime = clampInt(els.algoMovetime.value, 50, 15000, 4000);
     const evaluateSource = els.algoEvaluate.value.trim();
     if (!evaluateSource.includes("function evaluate")) {
       throw new Error('your code must define a function named "evaluate", e.g. function evaluate(chess) { ... }');
     }
-    const entry = buildAlgoEntryJs({ name: meta.name, author: meta.author, evaluateSource, defaultDepth: depth });
+    const entry = buildAlgoEntryJs({
+      name: meta.name,
+      author: meta.author,
+      evaluateSource,
+      defaultDepth: depth,
+      defaultMovetime: movetime,
+    });
     const chesslib = await fetchStaticAsset(bundledChessLibPath);
     const manifest = buildManifest({
       ...meta,
