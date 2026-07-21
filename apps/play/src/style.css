@@ -220,6 +220,82 @@ h3 { font-size: 12px; text-transform: uppercase; color: var(--text-dim); margin-
   color: rgba(0,0,0,0.35); z-index: 1;
 }
 
+.panel.moves {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+ 
+.move-list {
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  padding: 6px 4px;
+  margin-bottom: 12px;
+  font-variant-numeric: tabular-nums;
+}
+ 
+.move-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+ 
+.move-row:hover {
+  background: var(--panel-hover, rgba(255, 255, 255, 0.04));
+}
+ 
+.move-number {
+  width: 2.4em;
+  flex: 0 0 auto;
+  opacity: 0.6;
+  font-size: 0.9em;
+}
+ 
+.move-san {
+  flex: 1 1 0;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+ 
+.move-san:hover {
+  background: var(--panel-hover, rgba(255, 255, 255, 0.08));
+}
+ 
+.move-san.active {
+  background: var(--gold, #b8933f);
+  color: #1a1a1a;
+  font-weight: 600;
+}
+ 
+.nav-arrows {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+ 
+.nav-btn {
+  flex: 1 1 0;
+  font-size: 1.1em;
+  line-height: 1;
+  padding: 8px 0;
+}
+ 
+.nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+ 
+.export-btn {
+  width: 100%;
+}
+
 @media (max-width: 1100px) {
   .layout { grid-template-columns: 1fr; justify-items: center; }
   .library, .analysis { width: 100%; max-width: 480px; }
