@@ -25,6 +25,9 @@ const els = {
 
   nnContractHint: document.getElementById("nn-contract-hint"),
   nnModelFile: document.getElementById("nn-model-file"),
+  nnVariant: document.getElementById("nn-variant"),
+  nnVariantHint: document.getElementById("nn-variant-hint"),
+  nnDepthField: document.getElementById("nn-depth-field"),
   nnDepth: document.getElementById("nn-depth"),
 
   hashJsFile: document.getElementById("hash-js-file"),
@@ -124,6 +127,26 @@ function updateAlgoDepthFacts() {
   `;
 }
 
+const NN_VARIANT_HINTS = {
+  flat768:
+    "Board -> [1,768] float32 (12 piece planes x 64 squares) -> single scalar value from the " +
+    "side-to-move's perspective. The depth selector below drives a real negamax search that " +
+    "calls your model once per node.",
+  lc0:
+    "8-step history -> [1,112,8,8] float32 (lc0 classical encoding) -> policy (1858) + value " +
+    "heads. Runs exactly one inference per \"go\" and plays straight off the policy head -- " +
+    "no multi-ply search, so depth doesn't apply and is hidden below.",
+};
+
+function updateNnVariantUI() {
+  const variant = els.nnVariant.value;
+  els.nnVariantHint.textContent = NN_VARIANT_HINTS[variant] || "";
+  els.nnDepthField.style.display = variant === "lc0" ? "none" : "";
+}
+
+els.nnVariant.addEventListener("change", updateNnVariantUI);
+updateNnVariantUI();
+
 els.algoDepth.addEventListener("input", updateAlgoDepthFacts);
 els.algoMovetime.addEventListener("input", updateAlgoDepthFacts);
 updateAlgoDepthFacts();
@@ -185,8 +208,9 @@ async function buildCurrentPackage() {
   if (activeTab === "nn") {
     const model = await readFile(els.nnModelFile);
     if (!model) throw new Error("choose an .onnx model file first");
-    const depth = parseInt(els.nnDepth.value, 10);
-    const entry = buildNnEntryJs({ name: meta.name, author: meta.author, defaultDepth: depth });
+    const variant = els.nnVariant.value;
+    const depth = variant === "lc0" ? 1 : parseInt(els.nnDepth.value, 10);
+    const entry = buildNnEntryJs({ name: meta.name, author: meta.author, defaultDepth: depth, variant });
     const chesslib = await fetchStaticAsset(bundledChessLibPath);
     const manifest = buildManifest({
       ...meta,
