@@ -100,6 +100,16 @@ h3 { font-size: 12px; text-transform: uppercase; color: var(--text-dim); margin-
 
 .board-area { display: flex; flex-direction: column; align-items: center; min-width: 0; }
 
+/* board-column holds seat-row + board-wrap + status-row and is sized to the
+   board itself (board-wrap doesn't stretch), so those rows never extend
+   past the board's right edge into the moves-side area. */
+.board-column {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex: 0 0 auto;
+}
+
 .seat-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; width: 100%; gap: 10px; margin-bottom: 10px; }
 .seat { display: flex; flex-direction: column; font-family: var(--mono); font-size: 12px; }
 .seat:last-child { text-align: right; }
