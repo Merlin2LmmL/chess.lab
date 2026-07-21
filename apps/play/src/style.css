@@ -56,9 +56,11 @@ h3 { font-size: 12px; text-transform: uppercase; color: var(--text-dim); margin-
 }
 .import-btn:hover { filter: brightness(1.08); }
 
+/* Board-area now needs room for the board + moves-side sitting inside the
+   same card, so its track is wider than before (was minmax(420px,640px)). */
 .layout {
   display: grid;
-  grid-template-columns: 280px minmax(420px, 640px) 340px;
+  grid-template-columns: 260px minmax(760px, 820px) 300px;
   gap: 16px;
   padding: 16px;
   align-items: start;
@@ -70,6 +72,7 @@ h3 { font-size: 12px; text-transform: uppercase; color: var(--text-dim); margin-
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 16px;
+  min-width: 0; /* let grid items shrink instead of overflowing the track */
 }
 
 .hint { color: var(--text-dim); font-size: 12px; line-height: 1.5; margin: 0 0 12px; }
@@ -95,7 +98,7 @@ h3 { font-size: 12px; text-transform: uppercase; color: var(--text-dim); margin-
 .engine-card button.danger { color: var(--red); border-color: #5a3532; }
 .empty-note { color: var(--text-dim); font-size: 12px; font-style: italic; }
 
-.board-area { display: flex; flex-direction: column; align-items: center; }
+.board-area { display: flex; flex-direction: column; align-items: center; min-width: 0; }
 
 .seat-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; width: 100%; gap: 10px; margin-bottom: 10px; }
 .seat { display: flex; flex-direction: column; font-family: var(--mono); font-size: 12px; }
@@ -117,7 +120,7 @@ h3 { font-size: 12px; text-transform: uppercase; color: var(--text-dim); margin-
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn.active { border-color: var(--cyan); color: var(--cyan); }
 
-.board-wrap { display: flex; gap: 10px; align-items: stretch; }
+.board-wrap { display: flex; gap: 10px; align-items: stretch; flex: 0 0 auto; }
 
 .eval-bar {
   width: 22px;
@@ -220,42 +223,41 @@ h3 { font-size: 12px; text-transform: uppercase; color: var(--text-dim); margin-
   color: rgba(0,0,0,0.35); z-index: 1;
 }
 
+/* moves list + nav arrows + PGN export, squeezed into the board card */
 .board-row {
   display: flex;
   align-items: flex-start;
-  gap: 16px;
+  gap: 14px;
+  width: 100%;
+  justify-content: center;
 }
- 
-.board-row .board-wrap {
-  flex: 0 0 auto;
-}
- 
+
 .moves-side {
-  flex: 1 1 220px;
-  min-width: 200px;
-  max-width: 280px;
+  flex: 0 0 200px;
+  min-width: 180px;
+  max-width: 220px;
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
- 
+
 .moves-side h3 {
   margin: 0 0 8px;
   font-size: 0.95em;
 }
- 
+
 .move-list {
   flex: 1 1 auto;
   min-height: 120px;
   max-height: 360px;
   overflow-y: auto;
-  border: 1px solid var(--border, #333);
+  border: 1px solid var(--line);
   border-radius: 6px;
   padding: 6px 4px;
   margin-bottom: 12px;
   font-variant-numeric: tabular-nums;
 }
- 
+
 .move-row {
   display: flex;
   align-items: center;
@@ -263,60 +265,63 @@ h3 { font-size: 12px; text-transform: uppercase; color: var(--text-dim); margin-
   padding: 2px 6px;
   border-radius: 4px;
 }
- 
+
 .move-row:hover {
-  background: var(--panel-hover, rgba(255, 255, 255, 0.04));
+  background: var(--panel-2);
 }
- 
+
 .move-number {
   width: 2.4em;
   flex: 0 0 auto;
   opacity: 0.6;
   font-size: 0.9em;
 }
- 
+
 .move-san {
   flex: 1 1 0;
   cursor: pointer;
   padding: 2px 6px;
   border-radius: 4px;
 }
- 
+
 .move-san:hover {
-  background: var(--panel-hover, rgba(255, 255, 255, 0.08));
+  background: var(--panel-2);
 }
- 
+
 .move-san.active {
-  background: var(--gold, #b8933f);
-  color: #1a1a1a;
+  background: var(--gold);
+  color: #1a1400;
   font-weight: 600;
 }
- 
+
 .nav-arrows {
   display: flex;
   gap: 6px;
   margin-bottom: 10px;
 }
- 
+
 .nav-btn {
   flex: 1 1 0;
   font-size: 1.1em;
   line-height: 1;
   padding: 8px 0;
 }
- 
+
 .nav-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
 }
- 
+
 .export-btn {
   width: 100%;
 }
 
-@media (max-width: 900px) {
-  .board-row { flex-direction: column; }
-  .moves-side { max-width: none; width: 100%; }
+@media (max-width: 1300px) {
   .layout { grid-template-columns: 1fr; justify-items: center; }
-  .library, .analysis { width: 100%; max-width: 480px; }
+  .library, .analysis, .board-area { width: 100%; max-width: 780px; }
+}
+
+@media (max-width: 900px) {
+  .board-row { flex-direction: column; align-items: center; }
+  .moves-side { max-width: none; width: 100%; }
 }
