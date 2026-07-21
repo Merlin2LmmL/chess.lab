@@ -220,10 +220,28 @@ h3 { font-size: 12px; text-transform: uppercase; color: var(--text-dim); margin-
   color: rgba(0,0,0,0.35); z-index: 1;
 }
 
-.panel.moves {
+.board-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+ 
+.board-row .board-wrap {
+  flex: 0 0 auto;
+}
+ 
+.moves-side {
+  flex: 1 1 220px;
+  min-width: 200px;
+  max-width: 280px;
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+ 
+.moves-side h3 {
+  margin: 0 0 8px;
+  font-size: 0.95em;
 }
  
 .move-list {
@@ -296,7 +314,9 @@ h3 { font-size: 12px; text-transform: uppercase; color: var(--text-dim); margin-
   width: 100%;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 900px) {
+  .board-row { flex-direction: column; }
+  .moves-side { max-width: none; width: 100%; }
   .layout { grid-template-columns: 1fr; justify-items: center; }
   .library, .analysis { width: 100%; max-width: 480px; }
 }
