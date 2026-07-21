@@ -162,14 +162,14 @@ function buildLc0Planes(historyBoards, sideToMove, chessObj) {
   var flip = sideToMove === 'b';
   var data = new Float32Array(112 * 8 * 8);
   var n = historyBoards.length;
-  for (var k = 0; k < 8; k++) {
-    var histIdx = n - 1 - k;
-    if (histIdx < 0) continue; // no history that far back yet: leave zeros
-    var snap = historyBoards[histIdx];
-    var board = snap.board;
-    var oursColor = (k % 2 === 0) ? sideToMove : (sideToMove === 'w' ? 'b' : 'w');
-    var theirsColor = oursColor === 'w' ? 'b' : 'w';
-    var base = k * 13;
+    var oursColor = sideToMove;
+    var theirsColor = sideToMove === 'w' ? 'b' : 'w';
+    for (var k = 0; k < 8; k++) {
+      var histIdx = n - 1 - k;
+      if (histIdx < 0) continue;
+      var snap = historyBoards[histIdx];
+      var board = snap.board;
+      var base = k * 13;
     for (var row = 0; row < 8; row++) {
       for (var col = 0; col < 8; col++) {
         var piece = board[row][col];
