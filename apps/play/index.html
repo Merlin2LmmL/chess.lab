@@ -42,30 +42,32 @@
               <span class="seat-value" id="seat-white-value">Human</span>
             </div>
           </div>
-          <div class="board-wrap">
-            <div class="eval-bar" id="eval-bar" title="Evaluation, from White's perspective">
-              <div class="eval-bar-fill" id="eval-bar-fill"></div>
-              <div class="eval-bar-label" id="eval-bar-label">0.0</div>
+          <div class="board-row">
+            <div class="board-wrap">
+              <div class="eval-bar" id="eval-bar" title="Evaluation, from White's perspective">
+                <div class="eval-bar-fill" id="eval-bar-fill"></div>
+                <div class="eval-bar-label" id="eval-bar-label">0.0</div>
+              </div>
+              <div id="board-host"></div>
             </div>
-            <div id="board-host"></div>
+            <div class="moves-side">
+              <h3>Moves</h3>
+              <div id="move-list" class="move-list">
+                <p class="empty-note" id="move-list-empty">No moves yet.</p>
+              </div>
+              <div class="nav-arrows">
+                <button id="btn-nav-start" class="btn nav-btn" title="Go to start" disabled>&#8676;</button>
+                <button id="btn-nav-back" class="btn nav-btn" title="Previous move" disabled>&#8592;</button>
+                <button id="btn-nav-forward" class="btn nav-btn" title="Next move" disabled>&#8594;</button>
+                <button id="btn-nav-end" class="btn nav-btn" title="Go to latest" disabled>&#8677;</button>
+              </div>
+              <button id="btn-export-pgn" class="btn export-btn" disabled>Export PGN</button>
+            </div>
           </div>
           <div class="status-row">
             <span id="status-text">Set both seats, then start a new game.</span>
           </div>
         </section>
-        <aside class="panel moves" id="moves-panel">
-          <h2>Moves</h2>
-          <div id="move-list" class="move-list">
-            <p class="empty-note" id="move-list-empty">No moves yet.</p>
-          </div>
-          <div class="nav-arrows">
-            <button id="btn-nav-start" class="btn nav-btn" title="Go to start" disabled>&#8676;</button>
-            <button id="btn-nav-back" class="btn nav-btn" title="Previous move" disabled>&#8592;</button>
-            <button id="btn-nav-forward" class="btn nav-btn" title="Next move" disabled>&#8594;</button>
-            <button id="btn-nav-end" class="btn nav-btn" title="Go to latest" disabled>&#8677;</button>
-          </div>
-          <button id="btn-export-pgn" class="btn export-btn" disabled>Export PGN</button>
-        </aside>
         <aside class="panel analysis" id="analysis-panel">
           <h2>Analysis</h2>
           <div class="analysis-controls">
