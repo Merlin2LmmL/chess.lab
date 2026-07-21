@@ -62,6 +62,14 @@
               <input type="file" id="nn-model-file" accept=".onnx" />
             </label>
             <label class="field">
+              Model format / contract
+              <select id="nn-variant">
+                <option value="flat768" selected>flat768 -- custom-trained (12x64 planes, scalar value head)</option>
+                <option value="lc0">lc0 / Maia classical (112x8x8 history planes, policy+value heads)</option>
+              </select>
+            </label>
+            <div class="hint" id="nn-variant-hint"></div>
+            <label class="field" id="nn-depth-field">
               Search depth (each +1 multiplies inference calls by the branching factor)
               <select id="nn-depth">
                 <option value="1" selected>1 (evaluate each root move once)</option>
