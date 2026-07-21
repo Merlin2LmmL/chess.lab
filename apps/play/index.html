@@ -20,14 +20,12 @@
           </label>
         </div>
       </header>
-
       <main class="layout">
         <aside class="panel library" id="library-panel">
           <h2>Engine library</h2>
           <p class="hint">Imported <code>.chsengine.zip</code> packages, stored in this browser.</p>
           <div id="engine-list" class="engine-list"></div>
         </aside>
-
         <section class="panel board-area">
           <div class="seat-row">
             <div class="seat" id="seat-black">
@@ -44,7 +42,6 @@
               <span class="seat-value" id="seat-white-value">Human</span>
             </div>
           </div>
-
           <div class="board-wrap">
             <div class="eval-bar" id="eval-bar" title="Evaluation, from White's perspective">
               <div class="eval-bar-fill" id="eval-bar-fill"></div>
@@ -52,12 +49,23 @@
             </div>
             <div id="board-host"></div>
           </div>
-
           <div class="status-row">
             <span id="status-text">Set both seats, then start a new game.</span>
           </div>
         </section>
-
+        <aside class="panel moves" id="moves-panel">
+          <h2>Moves</h2>
+          <div id="move-list" class="move-list">
+            <p class="empty-note" id="move-list-empty">No moves yet.</p>
+          </div>
+          <div class="nav-arrows">
+            <button id="btn-nav-start" class="btn nav-btn" title="Go to start" disabled>&#8676;</button>
+            <button id="btn-nav-back" class="btn nav-btn" title="Previous move" disabled>&#8592;</button>
+            <button id="btn-nav-forward" class="btn nav-btn" title="Next move" disabled>&#8594;</button>
+            <button id="btn-nav-end" class="btn nav-btn" title="Go to latest" disabled>&#8677;</button>
+          </div>
+          <button id="btn-export-pgn" class="btn export-btn" disabled>Export PGN</button>
+        </aside>
         <aside class="panel analysis" id="analysis-panel">
           <h2>Analysis</h2>
           <div class="analysis-controls">
