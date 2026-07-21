@@ -27,6 +27,12 @@ const els = {
   candidateList: document.getElementById("candidate-list"),
   pvLine: document.getElementById("pv-line"),
   engineLog: document.getElementById("engine-log"),
+  moveList: document.getElementById("move-list"),
+  btnNavStart: document.getElementById("btn-nav-start"),
+  btnNavBack: document.getElementById("btn-nav-back"),
+  btnNavForward: document.getElementById("btn-nav-forward"),
+  btnNavEnd: document.getElementById("btn-nav-end"),
+  btnExportPgn: document.getElementById("btn-export-pgn"),
 };
 
 /** @type {{records: Array<any>}} */
@@ -42,9 +48,14 @@ const game = new Chess();
 let moveInFlight = false; // guards against overlapping engine goes / double clicks
 let analysisActive = false;
 
+// Ply index (0 = start position, N = position after N half-moves) currently
+// shown on the board. Equal to totalPly() whenever we're looking at the
+// live/current position; smaller while browsing move history.
+let viewIndex = 0;
+
 const board = new ChessBoardUI(els.boardHost, {
-  getChess: () => game,
-  canMove: () => !moveInFlight && isHumanTurn(),
+  getChess: () => getDisplayChess(),
+  canMove: () => !moveInFlight && isHumanTurn() && viewIndex >= totalPly(),
   onUserMove: onUserMove,
 });
 
@@ -55,6 +66,168 @@ function isHumanTurn() {
 function log(line) {
   els.engineLog.textContent += line + "\n";
   els.engineLog.scrollTop = els.engineLog.scrollHeight;
+}
+
+// ---------- move navigation ----------
+
+function totalPly() {
+  return game.history().length;
+}
+
+/**
+ * Returns the Chess instance the board should render. When browsing history
+ * (viewIndex < totalPly()) this is a disposable scratch instance replayed
+ * from the start; it is never mutated by the board (canMove() is false
+ * whenever we're not at the live position, so board.js never calls .move()
+ * on it).
+ */
+function getDisplayChess() {
+  if (viewIndex >= totalPly()) return game;
+  const scratch = new Chess();
+  const verbose = game.history({ verbose: true });
+  for (let i = 0; i < viewIndex; i++) {
+    const m = verbose[i];
+    scratch.move({ from: m.from, to: m.to, promotion: m.promotion });
+  }
+  return scratch;
+}
+
+function goToPly(ply) {
+  const clamped = Math.max(0, Math.min(totalPly(), ply));
+  if (clamped === viewIndex) return;
+  viewIndex = clamped;
+  syncBoardToViewIndex();
+}
+
+function goToStart() {
+  goToPly(0);
+}
+
+function goBack() {
+  goToPly(viewIndex - 1);
+}
+
+function goForward() {
+  goToPly(viewIndex + 1);
+}
+
+function goToEnd() {
+  goToPly(totalPly());
+}
+
+function syncBoardToViewIndex() {
+  board.clearSelection();
+
+  const verbose = game.history({ verbose: true });
+  if (viewIndex > 0) {
+    const m = verbose[viewIndex - 1];
+    board.setLastMove(m.from, m.to);
+  } else {
+    board.setLastMove(null, null);
+  }
+
+  const atLive = viewIndex >= totalPly();
+  if (atLive) {
+    // Restore the live analysis heatmap, if any, now that we're back.
+    if (analysisActive && multipvInfos.size > 0) renderAnalysis();
+  } else {
+    board.setHeatmap(new Map());
+  }
+
+  board.render();
+  renderMoveList();
+
+  if (atLive) {
+    els.statusText.textContent = game.game_over() ? gameOverText() : `${game.turn() === "w" ? "White" : "Black"} to move.`;
+  } else {
+    els.statusText.textContent = `Viewing move ${viewIndex} of ${totalPly()}.`;
+  }
+}
+
+function renderMoveList() {
+  const verbose = game.history({ verbose: true });
+  els.moveList.innerHTML = "";
+
+  if (verbose.length === 0) {
+    const p = document.createElement("p");
+    p.className = "empty-note";
+    p.textContent = "No moves yet.";
+    els.moveList.appendChild(p);
+  } else {
+    for (let i = 0; i < verbose.length; i += 2) {
+      const moveNumber = i / 2 + 1;
+      const row = document.createElement("div");
+      row.className = "move-row";
+
+      const num = document.createElement("span");
+      num.className = "move-number";
+      num.textContent = `${moveNumber}.`;
+      row.appendChild(num);
+
+      row.appendChild(makeMoveSpan(verbose[i].san, i + 1));
+
+      if (verbose[i + 1]) {
+        row.appendChild(makeMoveSpan(verbose[i + 1].san, i + 2));
+      }
+
+      els.moveList.appendChild(row);
+    }
+  }
+
+  const activeEl = els.moveList.querySelector(".move-san.active");
+  if (activeEl) activeEl.scrollIntoView({ block: "nearest" });
+  else els.moveList.scrollTop = 0;
+
+  updateNavButtonsState();
+}
+
+function makeMoveSpan(san, ply) {
+  const span = document.createElement("span");
+  span.className = "move-san";
+  span.textContent = san;
+  span.dataset.ply = String(ply);
+  if (ply === viewIndex) span.classList.add("active");
+  span.addEventListener("click", () => goToPly(ply));
+  return span;
+}
+
+function updateNavButtonsState() {
+  const atStart = viewIndex === 0;
+  const atEnd = viewIndex >= totalPly();
+  els.btnNavStart.disabled = atStart;
+  els.btnNavBack.disabled = atStart;
+  els.btnNavForward.disabled = atEnd;
+  els.btnNavEnd.disabled = atEnd;
+  els.btnExportPgn.disabled = totalPly() === 0;
+}
+
+function exportPgn() {
+  if (totalPly() === 0) return;
+
+  const whiteLabel = seats.w ? engineDisplayName(library.records.find((r) => r.id === seats.w)) : "Human";
+  const blackLabel = seats.b ? engineDisplayName(library.records.find((r) => r.id === seats.b)) : "Human";
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, ".");
+
+  game.header("Event", "chsengine game", "Date", today, "White", whiteLabel || "Human", "Black", blackLabel || "Human", "Result", pgnResult());
+
+  const pgn = game.pgn();
+  const blob = new Blob([pgn], { type: "application/x-chess-pgn" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  a.href = url;
+  a.download = `chsengine-game-${stamp}.pgn`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function pgnResult() {
+  if (!game.game_over()) return "*";
+  if (game.in_checkmate()) return game.turn() === "w" ? "0-1" : "1-0";
+  if (game.in_draw() || game.in_stalemate() || game.in_threefold_repetition() || game.insufficient_material()) return "1/2-1/2";
+  return "*";
 }
 
 // ---------- engine sessions ----------
@@ -128,8 +301,10 @@ async function maybeTriggerEngineMove() {
       moveInFlight = false;
       return;
     }
+    viewIndex = totalPly();
     board.setLastMove(move.from, move.to);
     board.render();
+    renderMoveList();
   } catch (err) {
     els.statusText.textContent = `Engine error: ${err.message}`;
   } finally {
@@ -154,6 +329,9 @@ function gameOverText() {
 }
 
 function onUserMove(_move) {
+  viewIndex = totalPly();
+  renderMoveList();
+
   if (game.game_over()) {
     els.statusText.textContent = gameOverText();
     return;
@@ -171,10 +349,12 @@ async function newGame() {
   clearAnalysisReadout();
 
   game.reset();
+  viewIndex = 0;
   board.clearSelection();
   board.setLastMove(null, null);
   board.setHeatmap(new Map());
   board.render();
+  renderMoveList();
   updateEvalBar(0, "cp");
   els.statusText.textContent = "White to move.";
 
@@ -349,6 +529,7 @@ function sanPvFromUci(uciMoves) {
 // ---------- library UI ----------
 
 function engineDisplayName(record) {
+  if (!record) return "";
   return `${record.manifest.name} v${record.manifest.version}`;
 }
 
@@ -463,5 +644,22 @@ els.btnAnalyzeToggle.addEventListener("click", () => {
   else startAnalysis();
 });
 
+els.btnNavStart.addEventListener("click", goToStart);
+els.btnNavBack.addEventListener("click", goBack);
+els.btnNavForward.addEventListener("click", goForward);
+els.btnNavEnd.addEventListener("click", goToEnd);
+els.btnExportPgn.addEventListener("click", exportPgn);
+
+document.addEventListener("keydown", (ev) => {
+  // Ignore when the user is typing into a form control.
+  const tag = document.activeElement?.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+  if (ev.key === "ArrowLeft") goBack();
+  else if (ev.key === "ArrowRight") goForward();
+  else if (ev.key === "ArrowUp") goToStart();
+  else if (ev.key === "ArrowDown") goToEnd();
+});
+
 board.render();
+renderMoveList();
 refreshLibrary();
