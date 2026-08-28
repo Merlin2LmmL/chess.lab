@@ -48,7 +48,7 @@ var MATE_SCORE = 100000;
 
 // Cheap material table used ONLY by the search shell for move ordering
 // (MVV-LVA-ish, quiescence). Intentionally separate from whatever material
-// weights the user's evaluate() below uses.
+// weights the user's evaluate() function uses.
 var QSEARCH_PIECE_VALUES = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 0 };
 var QUIESCENCE_MAX_PLY = 6; // caps runaway capture chains (e.g. many pawns on one file)
 
@@ -256,8 +256,20 @@ function negamax(c, depth, alpha, beta, deadline, nodeCounter, ply) {
 
   // Null-move pruning: if we could "pass" and the opponent still can't beat
   // beta, this position is already so favorable that a full-width search of
-  // it is very unlikely to be necessary. Skipped in check (illegal to pass)
-  // and with only king+pawns left (zugzwang risk makes the assumption unsafe).
+  // it is very unlikely to be necessary. Skipped in check (illegal to pass),
+  // with only king+pawns left (zugzwang risk makes the assumption unsafe),
+  // and whenever beta is still unbounded (+-Infinity) -- which happens near
+  // the root, and anywhere still on the "first move examined" path at a
+  // given ply, before alpha-beta has narrowed the window at all. Probing
+  // null-move there would recurse with "-beta" / "-beta + 1", which are
+  // themselves +-Infinity, producing a degenerate (alpha === beta, both
+  // infinite) child window. That degenerate window can make the recursive
+  // negamax call short-circuit and hand back literal Infinity/-Infinity as
+  // a "score" instead of a real evaluation, which then flips sign on the
+  // way back up the recursion and can poison a root move's score (and the
+  // transposition table) with Infinity -- the engine "sees" a forced win
+  // that isn't there and happily sacs material into it. Skipping the probe
+  // whenever beta isn't finite avoids ever constructing that window.
   //
   // Probe the null move on a throwaway Chess instance rather than loading it
   // into c (and "restoring" c afterwards): this chesslib's load() calls
@@ -267,7 +279,7 @@ function negamax(c, depth, alpha, beta, deadline, nodeCounter, ply) {
   // its own move later, leaving that piece stranded on the board for the
   // rest of the search (a source of engine-returned illegal moves). A
   // separate instance keeps that history intact.
-  if (depth >= NULL_MOVE_MIN_DEPTH && !inCheck && hasNonPawnMaterial(c, c.turn())) {
+  if (depth >= NULL_MOVE_MIN_DEPTH && !inCheck && isFinite(beta) && hasNonPawnMaterial(c, c.turn())) {
     var nullPosition = new Chess(nullMoveFen(c));
     var nullScore = -negamax(nullPosition, depth - 1 - NULL_MOVE_R, -beta, -beta + 1, deadline, nodeCounter, ply + 1);
     if (searchState.stop) return alpha;
