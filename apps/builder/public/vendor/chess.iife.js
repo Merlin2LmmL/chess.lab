@@ -1435,9 +1435,14 @@ var ChessLib = (() => {
       }
       return null;
     }
-    function make_pretty(ugly_move) {
+    function make_pretty(ugly_move, skip_san) {
       var move = clone(ugly_move);
-      move.san = move_to_san(move, generate_moves({ legal: true }));
+      // skip_san avoids an extra full generate_moves({legal:true}) call PER
+      // MOVE (needed only to disambiguate SAN like "Nbd2" vs "Nd2"). Search
+      // code never reads .san, only .from/.to/.flags/.captured/.piece -- so
+      // for that caller this is pure wasted work, and it's the dominant cost
+      // of moves({verbose:true}) (O(N) extra full generations for N moves).
+      move.san = skip_san ? undefined : move_to_san(move, generate_moves({ legal: true }));
       move.to = algebraic(move.to);
       move.from = algebraic(move.from);
       var flags = "";
@@ -1480,9 +1485,10 @@ var ChessLib = (() => {
       moves: function(options) {
         var ugly_moves = generate_moves(options);
         var moves = [];
+        var skip_san = typeof options !== "undefined" && options.skipSan;
         for (var i = 0, len = ugly_moves.length; i < len; i++) {
           if (typeof options !== "undefined" && "verbose" in options && options.verbose) {
-            moves.push(make_pretty(ugly_moves[i]));
+            moves.push(make_pretty(ugly_moves[i], skip_san));
           } else {
             moves.push(
               move_to_san(ugly_moves[i], generate_moves({ legal: true }))
