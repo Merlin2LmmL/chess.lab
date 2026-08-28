@@ -132,13 +132,23 @@ function scoreMoveForOrdering(move, ttMoveUci, ply) {
   return historyTable[move.from + move.to] || 0;
 }
 
-function orderedMoves(c, ttMoveUci, ply) {
-  var moves = c.moves({ verbose: true });
+function orderedMovesFromList(moves, ttMoveUci, ply) {
   var scored = moves.map(function (m) {
     return { m: m, s: scoreMoveForOrdering(m, ttMoveUci, ply) };
   });
   scored.sort(function (a, b) { return b.s - a.s; });
   return scored.map(function (x) { return x.m; });
+}
+
+function orderedMoves(c, ttMoveUci, ply) {
+  return orderedMovesFromList(c.moves({ verbose: true, skipSan: true }), ttMoveUci, ply);
+}
+
+// Half-move clock (for the 50-move rule) isn't exposed as its own method,
+// but it's cheap to read off the FEN string, which chesslib builds without
+// any move generation.
+function halfMoveClock(c) {
+  return parseInt(c.fen().split(' ')[4], 10);
 }
 
 function evaluateOrTerminal(c) {
@@ -155,11 +165,23 @@ function evaluateOrTerminal(c) {
 // the search along CAPTURES ONLY until the position is quiet, so the eval
 // at the true leaf reflects a stable material picture.
 // ---------------------------------------------------------------------
-function quiescence(c, alpha, beta, deadline, nodeCounter, qply) {
+function quiescence(c, alpha, beta, deadline, nodeCounter, qply, precomputedLegalMoves) {
   nodeCounter.count++;
 
-  if (c.in_checkmate()) return -MATE_SCORE;
-  if (c.in_draw() || c.in_stalemate() || c.in_threefold_repetition()) return 0;
+  // One full legal-move generation per node (or reuse the caller's, at the
+  // negamax->quiescence handoff), instead of separate generate_moves() calls
+  // for in_checkmate(), in_draw()'s internal in_stalemate(), the explicit
+  // in_stalemate(), and finally moves(). All of those checks reduce to "how
+  // many legal moves are there, and is the king in check", which this one
+  // call already answers.
+  var legalMoves = precomputedLegalMoves || c.moves({ verbose: true, skipSan: true });
+  var inCheck = c.in_check(); // no move generation involved
+  if (legalMoves.length === 0) {
+    return inCheck ? -MATE_SCORE : 0; // checkmate : stalemate
+  }
+  if (c.insufficient_material() || c.in_threefold_repetition() || halfMoveClock(c) >= 100) {
+    return 0;
+  }
 
   if (nodeCounter.count % 4096 === 0 && Date.now() > deadline) {
     searchState.stop = true;
@@ -173,7 +195,7 @@ function quiescence(c, alpha, beta, deadline, nodeCounter, qply) {
   if (standPat > alpha) alpha = standPat;
   if (qply <= 0) return alpha;
 
-  var moves = c.moves({ verbose: true }).filter(function (m) {
+  var moves = legalMoves.filter(function (m) {
     return m.flags.indexOf('c') !== -1 || m.flags.indexOf('e') !== -1;
   });
   moves.sort(function (a, b) {
@@ -196,11 +218,21 @@ function quiescence(c, alpha, beta, deadline, nodeCounter, qply) {
 function negamax(c, depth, alpha, beta, deadline, nodeCounter, ply) {
   nodeCounter.count++;
 
-  if (c.in_checkmate()) return -MATE_SCORE;
-  if (c.in_draw() || c.in_stalemate() || c.in_threefold_repetition()) return 0;
+  // Single full legal-move generation per node, reused for the terminal
+  // check (checkmate/stalemate), the null-move eligibility check below, and
+  // (once ordered) the actual move list -- see quiescence() for the same
+  // pattern and why it replaces several separate generate_moves() calls.
+  var legalMoves = c.moves({ verbose: true, skipSan: true });
+  var inCheck = c.in_check();
+  if (legalMoves.length === 0) {
+    return inCheck ? -MATE_SCORE : 0; // checkmate : stalemate
+  }
+  if (c.insufficient_material() || c.in_threefold_repetition() || halfMoveClock(c) >= 100) {
+    return 0;
+  }
 
   if (depth === 0) {
-    return quiescence(c, alpha, beta, deadline, nodeCounter, QUIESCENCE_MAX_PLY);
+    return quiescence(c, alpha, beta, deadline, nodeCounter, QUIESCENCE_MAX_PLY, legalMoves);
   }
 
   if (nodeCounter.count % 4096 === 0 && Date.now() > deadline) {
@@ -226,22 +258,23 @@ function negamax(c, depth, alpha, beta, deadline, nodeCounter, ply) {
   // beta, this position is already so favorable that a full-width search of
   // it is very unlikely to be necessary. Skipped in check (illegal to pass)
   // and with only king+pawns left (zugzwang risk makes the assumption unsafe).
-  if (depth >= NULL_MOVE_MIN_DEPTH && !c.in_check() && hasNonPawnMaterial(c, c.turn())) {
-    // Probe the null move on a throwaway Chess instance rather than loading
-    // it into \`c\` (and "restoring" c afterwards): this chesslib's load()
-    // calls clear(), which resets its internal move-history array. Since
-    // c.undo() just pops that array, doing a load()/load() round-trip on the
-    // shared search object silently erases every ancestor frame's ability to
-    // unmake its own move later, leaving that piece stranded on the board
-    // for the rest of the search (the source of engine-returned illegal
-    // moves). A separate instance keeps that history intact.
+  //
+  // Probe the null move on a throwaway Chess instance rather than loading it
+  // into c (and "restoring" c afterwards): this chesslib's load() calls
+  // clear(), which resets its internal move-history array. Since c.undo()
+  // just pops that array, doing a load()/load() round-trip on the shared
+  // search object silently erases every ancestor frame's ability to unmake
+  // its own move later, leaving that piece stranded on the board for the
+  // rest of the search (a source of engine-returned illegal moves). A
+  // separate instance keeps that history intact.
+  if (depth >= NULL_MOVE_MIN_DEPTH && !inCheck && hasNonPawnMaterial(c, c.turn())) {
     var nullPosition = new Chess(nullMoveFen(c));
     var nullScore = -negamax(nullPosition, depth - 1 - NULL_MOVE_R, -beta, -beta + 1, deadline, nodeCounter, ply + 1);
     if (searchState.stop) return alpha;
     if (nullScore >= beta) return beta;
   }
 
-  var moves = orderedMoves(c, ttMoveUci, ply);
+  var moves = orderedMovesFromList(legalMoves, ttMoveUci, ply);
   var best = -Infinity;
   var bestMoveUci = null;
   for (var i = 0; i < moves.length; i++) {
@@ -284,7 +317,7 @@ function searchBestMove(maxDepth, deadline, startTime, nodeCounter) {
   var bestScore = 0;
   var prevBestMoveUci = null;
 
-  if (chess.moves().length === 0) return { move: null, score: 0 };
+  if (chess.moves({ verbose: true, skipSan: true }).length === 0) return { move: null, score: 0 };
 
   for (var d = 1; d <= maxDepth; d++) {
     var rootMoves = orderedMoves(chess, prevBestMoveUci, 0);
