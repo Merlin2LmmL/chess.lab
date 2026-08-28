@@ -107,11 +107,11 @@ function hasNonPawnMaterial(c, color) {
   return false;
 }
 
-function makeNullMove(c) {
+function nullMoveFen(c) {
   var parts = c.fen().split(' ');
   parts[1] = parts[1] === 'w' ? 'b' : 'w';
   parts[3] = '-'; // an en-passant target can't carry over a null move
-  c.load(parts.join(' '));
+  return parts.join(' ');
 }
 
 function scoreMoveForOrdering(move, ttMoveUci, ply) {
@@ -227,10 +227,16 @@ function negamax(c, depth, alpha, beta, deadline, nodeCounter, ply) {
   // it is very unlikely to be necessary. Skipped in check (illegal to pass)
   // and with only king+pawns left (zugzwang risk makes the assumption unsafe).
   if (depth >= NULL_MOVE_MIN_DEPTH && !c.in_check() && hasNonPawnMaterial(c, c.turn())) {
-    var savedFen = c.fen();
-    makeNullMove(c);
-    var nullScore = -negamax(c, depth - 1 - NULL_MOVE_R, -beta, -beta + 1, deadline, nodeCounter, ply + 1);
-    c.load(savedFen);
+    // Probe the null move on a throwaway Chess instance rather than loading
+    // it into \`c\` (and "restoring" c afterwards): this chesslib's load()
+    // calls clear(), which resets its internal move-history array. Since
+    // c.undo() just pops that array, doing a load()/load() round-trip on the
+    // shared search object silently erases every ancestor frame's ability to
+    // unmake its own move later, leaving that piece stranded on the board
+    // for the rest of the search (the source of engine-returned illegal
+    // moves). A separate instance keeps that history intact.
+    var nullPosition = new Chess(nullMoveFen(c));
+    var nullScore = -negamax(nullPosition, depth - 1 - NULL_MOVE_R, -beta, -beta + 1, deadline, nodeCounter, ply + 1);
     if (searchState.stop) return alpha;
     if (nullScore >= beta) return beta;
   }
