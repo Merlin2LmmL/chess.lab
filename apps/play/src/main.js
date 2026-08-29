@@ -456,23 +456,20 @@ function stopAnalysis() {
 function scoreToCpWhitePerspective(score) {
   if (!score) return null;
 
-  if (score.type === "mate") {
-    return Math.sign(score.value) * (100000 - Math.abs(score.value));
-  }
+  const magnitude =
+    score.type === "mate"
+      ? Math.sign(score.value) * (100000 - Math.abs(score.value))
+      : score.value;
 
-  return score.value;
+  return game.turn() === "w" ? magnitude : -magnitude;
 }
 
-function formatScore(score) {
-  if (!score) return "-";
+function formatScore(cpWhitePerspective) {
+  if (cpWhitePerspective == null) return "-";
 
-  if (score.type === "mate") {
-    return `#${score.value}`;
-  }
-
-  const pawns = (score.value / 100).toFixed(2);
-  return score.value > 0 ? `+${pawns}` : pawns;
-}}
+  const pawns = (cpWhitePerspective / 100).toFixed(2);
+  return cpWhitePerspective > 0 ? `+${pawns}` : pawns;
+}
 
 function updateEvalBar(cpWhitePerspective) {
   const clamped = Math.max(-1000, Math.min(1000, cpWhitePerspective));
