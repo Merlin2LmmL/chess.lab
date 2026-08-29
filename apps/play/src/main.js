@@ -455,16 +455,24 @@ function stopAnalysis() {
 
 function scoreToCpWhitePerspective(score) {
   if (!score) return null;
-  const magnitude = score.type === "mate" ? Math.sign(score.value) * (100000 - Math.abs(score.value)) : score.value;
-  return game.turn() === "w" ? magnitude : -magnitude;
+
+  if (score.type === "mate") {
+    return Math.sign(score.value) * (100000 - Math.abs(score.value));
+  }
+
+  return score.value;
 }
 
 function formatScore(score) {
   if (!score) return "-";
-  if (score.type === "mate") return `#${score.value}`;
+
+  if (score.type === "mate") {
+    return `#${score.value}`;
+  }
+
   const pawns = (score.value / 100).toFixed(2);
   return score.value > 0 ? `+${pawns}` : pawns;
-}
+}}
 
 function updateEvalBar(cpWhitePerspective) {
   const clamped = Math.max(-1000, Math.min(1000, cpWhitePerspective));
