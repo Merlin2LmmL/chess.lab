@@ -4,7 +4,13 @@ import { UciClient } from "@chess-lab/chsengine-core";
 import { ChessBoardUI } from "./board.js";
 import { listEngines, addEngine, getEngineBlob, removeEngine } from "./engineStore.js";
 
-const THINK_TIME_MS = 1200; // fixed engine move time; simple and predictable for a local test rig
+// Fallback movetime cap used when the engine's own manifest doesn't expose
+// defaultMovetimeMs (e.g. older packages built before this field existed).
+// This is a CAP: engines built with the obvious-move fast path (single
+// legal move, forced equal-or-better recapture) will typically return well
+// under this, so raising it doesn't necessarily mean slower games -- it
+// only raises the ceiling for positions that actually need the time.
+const FALLBACK_MOVETIME_MS = 4000;
 
 const els = {
   importInput: document.getElementById("import-input"),
@@ -66,6 +72,15 @@ function isHumanTurn() {
 function log(line) {
   els.engineLog.textContent += line + "\n";
   els.engineLog.scrollTop = els.engineLog.scrollHeight;
+}
+
+// Resolves the movetime cap to send an engine's "go" command: prefer the
+// value the engine's own manifest declares (set at build time via the
+// chsengine builder's defaultMovetime option), falling back to
+// FALLBACK_MOVETIME_MS for packages that don't expose it.
+function resolveMovetimeMs(session) {
+  const fromManifest = session?.manifest?.defaultMovetimeMs;
+  return typeof fromManifest === "number" && fromManifest > 0 ? fromManifest : FALLBACK_MOVETIME_MS;
 }
 
 // ---------- move navigation ----------
@@ -286,7 +301,8 @@ async function maybeTriggerEngineMove() {
     const session = sessions.get(`seat:${turn}`);
     if (!session) throw new Error("engine session not ready");
     session.uci.setPosition({ moves: historyUci() });
-    const result = await session.uci.go({ movetime: THINK_TIME_MS });
+    const movetime = resolveMovetimeMs(session);
+    const result = await session.uci.go({ movetime });
     if (!result.bestmove) {
       els.statusText.textContent = "Engine returned no move (bestmove none).";
       moveInFlight = false;
