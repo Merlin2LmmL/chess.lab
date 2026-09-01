@@ -42,6 +42,10 @@ var ENGINE_NAME = /*__ENGINE_NAME__*/ "engine";
 var ENGINE_AUTHOR = /*__ENGINE_AUTHOR__*/ "unknown";
 
 var DEFAULT_MAX_DEPTH = /*__DEFAULT_DEPTH__*/ 4;
+// DEFAULT_MOVETIME_MS is a CAP, not a target: the engine will use up to this
+// much time when it needs to search, but the obvious-move fast path below
+// (single legal move / forced equal-or-better recapture) intentionally
+// returns well under this cap when there's nothing to think about.
 var DEFAULT_MOVETIME_MS = /*__DEFAULT_MOVETIME__*/ 4000;
 var HARD_SAFETY_MS = 15000; // absolute cap even for "go infinite"
 var MATE_SCORE = 100000;
@@ -324,12 +328,66 @@ function negamax(c, depth, alpha, beta, deadline, nodeCounter, ply) {
   return best;
 }
 
+// ---------------------------------------------------------------------
+// Obvious-move fast path. Lets the engine return well under its movetime
+// cap when there's nothing meaningful to calculate:
+//   - exactly one legal move on the board (forced), or
+//   - exactly one legal capture, no legal move gives check, and that
+//     capture recovers at least as much material as it spends (a forced,
+//     non-losing recapture).
+// Any position with more than one reasonable option, or any tactical shot
+// (a check is available), falls through to the normal search -- this is
+// intentionally conservative so it never trades away a real brilliancy for
+// speed.
+// ---------------------------------------------------------------------
+function findForcedRecapture(c, legalMoves) {
+  if (c.in_check()) return null; // forced replies to check need real search
+
+  var captures = [];
+  for (var i = 0; i < legalMoves.length; i++) {
+    var mv = legalMoves[i];
+    var isCapture = mv.flags.indexOf('c') !== -1 || mv.flags.indexOf('e') !== -1;
+    if (isCapture) captures.push(mv);
+    // Any checking move on the board means there may be a tactic worth
+    // real search time, even alongside a "forced" recapture.
+    if (mv.flags.indexOf('+') !== -1 || mv.flags.indexOf('#') !== -1) return null;
+  }
+  if (captures.length !== 1) return null;
+
+  var recapture = captures[0];
+  var capturedValue = QSEARCH_PIECE_VALUES[recapture.flags.indexOf('e') !== -1 ? 'p' : recapture.captured] || 0;
+  var attackerValue = QSEARCH_PIECE_VALUES[recapture.piece] || 0;
+
+  // Only auto-play equal-or-winning trades; a "forced" recapture that loses
+  // material outright might still not be best (an in-between move could be
+  // better), so let the real search handle it.
+  if (capturedValue < attackerValue) return null;
+
+  return recapture;
+}
+
+function findObviousMove(c) {
+  var legalMoves = c.moves({ verbose: true, skipSan: true });
+  if (legalMoves.length === 1) return legalMoves[0];
+  return findForcedRecapture(c, legalMoves);
+}
+
 function searchBestMove(maxDepth, deadline, startTime, nodeCounter) {
   var best = null;
   var bestScore = 0;
   var prevBestMoveUci = null;
 
   if (chess.moves({ verbose: true, skipSan: true }).length === 0) return { move: null, score: 0 };
+
+  var obvious = findObviousMove(chess);
+  if (obvious) {
+    send(
+      'info depth 1 score cp 0 nodes 0 nps 0 time ' +
+      Math.max(1, Date.now() - startTime) +
+      ' pv ' + toUciMove(obvious)
+    );
+    return { move: obvious, score: 0 };
+  }
 
   for (var d = 1; d <= maxDepth; d++) {
     var rootMoves = orderedMoves(chess, prevBestMoveUci, 0);
