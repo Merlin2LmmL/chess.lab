@@ -1762,6 +1762,26 @@ var ChessLib = (() => {
       turn: function() {
         return turn;
       },
+      // Lean accessors: read internal state directly instead of building
+      // and re-parsing a full FEN string, which is what fen() does under
+      // the hood (a fresh string concatenation over every square, every
+      // call). These return the exact same values FEN's respective fields
+      // would give, so callers can swap chess.fen().split(' ')[N] for one
+      // of these without any behavior change.
+      half_move_clock: function() {
+        return half_moves;
+      },
+      castling_rights: function() {
+        var cflags = "";
+        if (castling[WHITE] & BITS.KSIDE_CASTLE) cflags += "K";
+        if (castling[WHITE] & BITS.QSIDE_CASTLE) cflags += "Q";
+        if (castling[BLACK] & BITS.KSIDE_CASTLE) cflags += "k";
+        if (castling[BLACK] & BITS.QSIDE_CASTLE) cflags += "q";
+        return cflags || "-";
+      },
+      move_number: function() {
+        return move_number;
+      },
       move: function(move, options) {
         var sloppy = typeof options !== "undefined" && "sloppy" in options ? options.sloppy : false;
         var move_obj = null;
